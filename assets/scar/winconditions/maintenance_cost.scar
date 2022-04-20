@@ -51,9 +51,7 @@ end
 
 -- Called on match initialization before handing control to the player
 function Mod_OnInit()
-	
-	
-	
+	Rule_AddInterval(Mod_PayCost, 60 * 5)
 end
 
 -- Called after initialization is done when game is fading up from black
@@ -75,4 +73,17 @@ function Mod_OnGameOver()
 	
 	
 	
+end
+
+function Mod_PayCost()
+	for _, player in pairs(PLAYERS) do
+		local id = player.id
+		local mc = Player_GetEntityCountByUnitType(id, "military")
+		local vc = Player_GetEntityCountByUnitType(id, "villager")
+		local res = Player_GetResources(id)
+		Player_SetResource(id, RT_Food, math.max(res.food - vc * 5, 0))
+		Player_SetResource(id, RT_Wood, math.max(res.wood - mc * 10, 0))
+		Player_SetResource(id, RT_Gold, math.max(res.gold - mc * 10, 0))
+		Player_SetResource(id, RT_Stone, math.max(res.stone - mc * 10, 0))
+	end
 end
