@@ -34,6 +34,8 @@ Core_RegisterModule(_mod.module)
 -- Scripting framework 
 -----------------------------------------------------------------------
 
+local defeated_players = {}
+
 -- Called during load as part of the game setup sequence
 function Mod_OnGameSetup()
 	
@@ -52,6 +54,7 @@ end
 -- Called on match initialization before handing control to the player
 function Mod_OnInit()
 	Rule_AddInterval(Mod_PayCost, 60 * 5)
+	Rule_AddGlobalEvent(Mod_OnEntityKilled, GE_EntityKilled)
 end
 
 -- Called after initialization is done when game is fading up from black
@@ -63,9 +66,16 @@ end
 
 -- Called when Core_SetPlayerDefeated() is invoked. Signals that a player has been eliminated from play due to defeat.
 function Mod_OnPlayerDefeated(player, reason)
-	
-	
-	
+	if #defeated_players < World_GetPlayerCount() - 1 then
+		return
+	end
+	local id = Game_GetLocalPlayerID()
+	for _, p in ipairs(defeated_players) do
+		if id == p then
+			return
+		end
+	end
+	Core_SetPlayerVictorious(Game_GetLocalPlayer(), Mod_OnMarkedAsVictorious, WR_CONQUEST)
 end
 
 -- When a victory condition is met, a module must call Core_OnGameOver() in order to invoke this delegate and notify all modules that the match is about to end. Generally used for clean up (removal of rules, objectives, and UI elements specific to the module).
@@ -86,4 +96,81 @@ function Mod_PayCost()
 		Player_SetResource(id, RT_Gold, math.max(res.gold - mc * 10, 0))
 		Player_SetResource(id, RT_Stone, math.max(res.stone - mc * 10, 0))
 	end
+end
+
+function Mod_OnEntityKilled(context)
+	local player = context.victimOwner
+	local unit = context.victim
+	local military = Entity_IsOfType(unit, "military")
+	if military then
+		local mc = Player_GetEntityCountByUnitType(player, "military")
+		if mc <= 0 then
+			Mod_MarkAsDefeat(player)
+			return
+		end
+	end
+	local villager = Entity_IsOfType(unit, "villager")
+	if villager then
+		local vc = Player_GetEntityCountByUnitType(player, "villager")
+		if vc <= 0 then
+			Mod_MarkAsDefeat(player)
+			return
+		end
+	end
+end
+
+function Mod_MarkAsDefeat(player)
+	Core_SetPlayerDefeated(player, Mod_OnMarkedAsDefeat, WR_CONQUEST)
+end
+
+function Mod_OnMarkedAsDefeat(player)
+	local id = Player_GetID(player)
+	for _, p in ipairs(defeated_players) do
+		if p == id then
+			return
+		end
+	end
+	table.insert(defeated_players, id)
+	if not id == Game_GetLocalPlayerID() then
+		return
+	end
+
+	Misc_ClearSelection()
+	Taskbar_SetVisibility(false)
+
+	Rule_AddOneShot(
+		_gameOver_message,
+		GAMEOVER_OBJECTIVE_TIME,
+		{
+			_playerID = player,
+			_icon = "icons\\races\\common\\victory_conditions\\victory_condition_conquest",
+			_endType = Loc_GetString(11045235),
+			_message = Loc_Empty(),
+			_sound = "mus_stinger_landmark_objective_complete_fail",
+			_videoURI = "stinger_defeat"
+		}
+	)
+end
+
+function Mod_OnMarkedAsVictorious(player)
+	local id = Player_GetID(player)
+	if not id == Game_GetLocalPlayerID() then
+		return
+	end
+
+	Misc_ClearSelection()
+	Taskbar_SetVisibility(false)
+
+	Rule_AddOneShot(
+		_gameOver_message,
+		GAMEOVER_OBJECTIVE_TIME,
+		{
+			_playerID = player,
+			_icon = "icons\\races\\common\\victory_conditions\\victory_condition_conquest",
+			_endType = Loc_GetString(11161277),
+			_message = Loc_Empty(),
+			_sound = "mus_stinger_landmark_objective_complete_success",
+			_videoURI = "stinger_victory"
+		}
+	)
 end
